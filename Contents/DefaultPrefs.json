@@ -60,5 +60,11 @@
     "label":"Number of Gallery Images to pull if enabled",
     "type":"text",
     "default":"3"
+  },
+  {
+    "id":"studioascollection",
+    "label":"Use Studio Name as Collection Tag",
+    "type":"bool",
+    "default":"false"
   }
 ]
