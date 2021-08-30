@@ -14,6 +14,7 @@ if DEBUG:
 else:
   Log('Agent debug logging is disabled!')
 
+studioascollection = preference['studioascollection']
 
 if len(preference['searchtype']) and preference['searchtype'] != 'all':
   searchtype = preference['searchtype']
@@ -172,6 +173,7 @@ class ADEAgent(Agent.Movies):
     results.Sort('score', descending=True)
 
   def update(self, metadata, media, lang):
+    if DEBUG: Log('Beginning Update...')
     html = HTML.ElementFromURL(ADE_MOVIE_INFO % metadata.id)
     metadata.title = media.title
     metadata.title = re.sub(r'\ \[\d{4}-\d{2}-\d{2}\]','',metadata.title).strip()
@@ -186,6 +188,7 @@ class ADEAgent(Agent.Movies):
 
     # Thumb and Poster
     try:
+      if DEBUG: Log('Looking for thumb and poster')
       img = html.xpath('//*[@id="front-cover"]/img')[0]
       thumbUrl = img.get('src')
 
@@ -211,38 +214,61 @@ class ADEAgent(Agent.Movies):
     data = {}
 
     # Match diffrent code, some titles are missing parts -- Still fails and needs to be refined.
+    if DEBUG: Log('Detecting Product info...')
+    if DEBUG: Log('Trying xpath 1...')
     if html.xpath('//*[@id="content"]/div[2]/div[3]/div/div[1]/ul'):
       productinfo = HTML.StringFromElement(html.xpath('//*[@id="content"]/div[2]/div[3]/div/div[1]/ul')[0])
+      if DEBUG: Log('Match on xpath 1...')
+    if DEBUG: Log('Trying xpath 2...')
     if html.xpath('//*[@id="content"]/div[2]/div[4]/div/div[1]/ul'):
       productinfo = HTML.StringFromElement(html.xpath('//*[@id="content"]/div[2]/div[4]/div/div[1]/ul')[0])
+      if DEBUG: Log('Match on xpath 2...')
+    if DEBUG: Log('Trying xpath 3...')
     if html.xpath('//*[@id="content"]/div[2]/div[2]/div/div[1]/ul'):
       productinfo = HTML.StringFromElement(html.xpath('//*[@id="content"]/div[2]/div[2]/div/div[1]/ul')[0])
+      if DEBUG: Log('Match on xpath 3...')
+    if DEBUG: Log('Trying xpath 4...')
     if html.xpath('//*[@id="content"]/div[3]/div[3]/div/div[1]/ul'):
       productinfo = HTML.StringFromElement(html.xpath('//*[@id="content"]/div[3]/div[3]/div/div[1]/ul')[0])
+      if DEBUG: Log('Match on xpath 4...')
+    if DEBUG: Log('Trying xpath 5...')
     if html.xpath('//*[@id="content"]/div[3]/div[4]/div/div[1]/ul'):
       productinfo = HTML.StringFromElement(html.xpath('//*[@id="content"]/div[3]/div[4]/div/div[1]/ul')[0])
+      if DEBUG: Log('Match on xpath 5...')
+    if DEBUG: Log('Trying NEW xpath 6...')
+    if html.xpath('//ul[@class="list-unstyled m-b-2"]'):
+      productinfo = HTML.StringFromElement(html.xpath('//ul[@class="list-unstyled m-b-2"]/li')[0])
+      if DEBUG: Log('Match on xpath 6...')
 
     productinfo = productinfo.replace('<small>', '|')
     productinfo = productinfo.replace('</small>', '')
     productinfo = productinfo.replace('<li>', '').replace('</li>', '')
+    productinfo = productinfo.replace('Features', '|')
+    #productinfo = re.sub('Features *', '', productinfo, flags=re.M)
     productinfo = HTML.ElementFromString(productinfo).text_content()
-
+    #if DEBUG: Log ('text_content: %s', productinfo)
     for div in productinfo.split('|'):
       if ':' in div:
         name, value = div.split(':')
         data[name.strip()] = value.strip()
         if DEBUG: Log('Title Metadata Key: [%s]   Value: [%s]', name.strip(), value.strip())
+        if name.strip() == "Studio": break
 
+    if DEBUG: Log('Parsing of product info complete...')
     # Rating
     if data.has_key('Rating'):
+      if DEBUG: Log('Rating Present...')
       metadata.content_rating = data['Rating']
 
     # Studio
     if data.has_key('Studio'):
+      if DEBUG: Log('Studio Present...')
       metadata.studio = data['Studio']
+      studio = data['Studio']
 
     # Release
     if data.has_key('Released'):
+      if DEBUG: Log('Release Present...')
       try:
         metadata.originally_available_at = Datetime.ParseDate(data['Released']).date()
         metadata.year = metadata.originally_available_at.year
@@ -320,11 +346,16 @@ class ADEAgent(Agent.Movies):
     try:
       metadata.directors.clear()
       if html.xpath('//a[contains(@label, "Director - details")]'):
-        htmldirector = HTML.StringFromElement(html.xpath('//a[contains(@label, "Director - details")]')[0])
-        htmldirector = HTML.ElementFromString(htmldirector).text_content().strip()
+        if DEBUG: Log('Director Label Found...')
+        #htmldirector = HTML.StringFromElement(html.xpath('//a[contains(@label, "Director - details")]/text()'))
+        #htmldirector = HTML.ElementFromString(htmldirector).text_content().strip()
+        htmldirector = html.xpath('//a[contains(@label, "Director - details")]/text()')
+        #htmldirector = htmldirector.replace('\t', '')
+        if DEBUG: Log('Director is: %s', htmldirector[0])
         if (len(htmldirector) > 0):
+          directorstring = htmldirector
           director = metadata.directors.new()
-          director.name = htmldirector
+          director.name = htmldirector[0]
     except Exception, e:
       Log('Got an exception while parsing director %s' %str(e))
 
@@ -338,6 +369,7 @@ class ADEAgent(Agent.Movies):
         series = series[1]
         metadata.collections.add(series)
     except: pass
+    if studioascollection: metadata.collections.add(studio)
 
     # Genres
 
