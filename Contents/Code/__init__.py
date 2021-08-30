@@ -1,5 +1,5 @@
 # AdultDVDEmpire
-# Update: 8 January 2019
+# Update: 30 August 2021
 # Description: New updates from a lot of diffrent forks and people. Please read README.md for more details.
 import re
 import datetime
@@ -202,50 +202,30 @@ class ADEAgent(Agent.Movies):
     try:
         summary = html.xpath('//div[@class="col-xs-12 text-center p-y-2 bg-lightgrey"]/div/p')[0].text_content().strip()
         summary = re.sub('<[^<]+?>', '', summary)
-        Log('Summary Found: %s' %str(summary))
+        if DEBUG: Log('Summary Found: %s' %str(summary))
         metadata.summary = summary
     except Exception, e:
       Log('Got an exception while parsing summary %s' %str(e))
 
-    # Product info div
-    data = {}
-
-    # Match diffrent code, some titles are missing parts -- Still fails and needs to be refined.
-    if html.xpath('//*[@id="content"]/div[2]/div[3]/div/div[1]/ul'):
-      productinfo = HTML.StringFromElement(html.xpath('//*[@id="content"]/div[2]/div[3]/div/div[1]/ul')[0])
-    if html.xpath('//*[@id="content"]/div[2]/div[4]/div/div[1]/ul'):
-      productinfo = HTML.StringFromElement(html.xpath('//*[@id="content"]/div[2]/div[4]/div/div[1]/ul')[0])
-    if html.xpath('//*[@id="content"]/div[2]/div[2]/div/div[1]/ul'):
-      productinfo = HTML.StringFromElement(html.xpath('//*[@id="content"]/div[2]/div[2]/div/div[1]/ul')[0])
-    if html.xpath('//*[@id="content"]/div[3]/div[3]/div/div[1]/ul'):
-      productinfo = HTML.StringFromElement(html.xpath('//*[@id="content"]/div[3]/div[3]/div/div[1]/ul')[0])
-    if html.xpath('//*[@id="content"]/div[3]/div[4]/div/div[1]/ul'):
-      productinfo = HTML.StringFromElement(html.xpath('//*[@id="content"]/div[3]/div[4]/div/div[1]/ul')[0])
-
-    productinfo = productinfo.replace('<small>', '|')
-    productinfo = productinfo.replace('</small>', '')
-    productinfo = productinfo.replace('<li>', '').replace('</li>', '')
-    productinfo = HTML.ElementFromString(productinfo).text_content()
-
-    for div in productinfo.split('|'):
-      if ':' in div:
-        name, value = div.split(':')
-        data[name.strip()] = value.strip()
-        if DEBUG: Log('Title Metadata Key: [%s]   Value: [%s]', name.strip(), value.strip())
-
     # Rating
-    if data.has_key('Rating'):
-      metadata.content_rating = data['Rating']
+    rating = html.xpath('//h2[contains(text(),"Product Information")]/following-sibling::ul/li[contains(./*,"Rating")]/text()')[0].strip()
+    if rating:
+      if DEBUG: Log("Rating: %s" % rating.strip())
+      metadata.content_rating = rating.strip()
 
     # Studio
-    if data.has_key('Studio'):
-      metadata.studio = data['Studio']
+    studio = html.xpath('//h2[contains(text(),"Product Information")]/following-sibling::ul/li[contains(./*,"Studio")]/a/text()')[0].strip()
+    if studio:
+      if DEBUG: Log("Studio: %s" % studio.strip())
+      metadata.studio = studio.strip()
 
     # Release
-    if data.has_key('Released'):
+    released = html.xpath('//h2[contains(text(),"Product Information")]/following-sibling::ul/li[contains(./*,"Released")]/text()')[0].strip()
+    if released:
       try:
-        metadata.originally_available_at = Datetime.ParseDate(data['Released']).date()
+        metadata.originally_available_at = Datetime.ParseDate(released.strip()).date()
         metadata.year = metadata.originally_available_at.year
+        if DEBUG: Log("Release Date: %s" % metadata.originally_available_at)
       except: pass
 
     # Production Year
@@ -253,9 +233,10 @@ class ADEAgent(Agent.Movies):
     # based off of the Production Year that is returned.  Don't want to do it unless the difference
     # is greater than one year however, to allow for production at the end of the year with first of
     # year release
+    prodyear = html.xpath('//h2[contains(text(),"Product Information")]/following-sibling::ul/li[contains(./*,"Production Year")]/text()')[0].strip()
     if preference['useproductiondate']:
-        if data.has_key('Production Year'):
-          productionyear = int(data['Production Year'])
+        if prodyear:
+          productionyear = int(prodyear.strip())
           if productionyear > 1900:
               if DEBUG: Log('Release Date Year for Title: %i' % metadata.year)
               if DEBUG: Log('Production Year for Title: %i' % productionyear)
@@ -281,37 +262,37 @@ class ADEAgent(Agent.Movies):
             role.name = uppername
             role.photo = upperurl
 
-        # Bottom List: doesn't have photo links available, so only uses to add names to the ones from the upper
-        if html.xpath('//a[contains(@class,"PerformerName")][not(ancestor::small)]'):
-          htmlcastLower = html.xpath('//a[contains(@class,"PerformerName")][not(ancestor::small)]')
-          lowerlist = []
-          for removedupestar in htmlcastLower:
-            # I realize there has to be a cleaner way to do this, but essentially this takes them
-            # name and bio page url, strips the star id from the url, then hooks the name and id
-            # together in a pseudo dictionary to be split back out later
-            lowername = removedupestar.xpath('./text()')[0]
-            lowerurl = removedupestar.xpath('./@href')[0]
-            lowerurlre = re.search('\d{3,8}',lowerurl)
-            lowerentry = lowername.strip() + '|' + lowerurlre.group(0).strip()
-            lowerlist.append(lowerentry)
-          lowerlist = list(set(lowerlist))
-          for lowerstar in lowerlist:
-            if (len(lowerstar) > 0):
-              lowerstarname, lowerstarurl = lowerstar.split("|")
-              # There are different descriptors that will show up as a name, for now just adding them ad-hoc
-              # to following statement with "and lowerstar.lower() != 'bio'"
-              if (lowerstarname not in upperlist and lowerstarname.lower() != 'bio' and lowerstarname.lower() != 'interview'):
-                role = metadata.roles.new()
-                role.name = lowerstarname
-                if len(lowerstarurl) > 1:
-                  photourl = "https://imgs1cdn.adultempire.com/actors/" + lowerstarurl + ".jpg"
-                  if self.file_exists(photourl):
-                    role.photo = photourl
-                  else:
-                    photourl = "Image Not Available"
+      # Bottom List: doesn't have photo links available, so only uses to add names to the ones from the upper
+      if html.xpath('//a[contains(@class,"PerformerName")][not(ancestor::small)]'):
+        htmlcastLower = html.xpath('//a[contains(@class,"PerformerName")][not(ancestor::small)]')
+        lowerlist = []
+        for removedupestar in htmlcastLower:
+          # I realize there has to be a cleaner way to do this, but essentially this takes them
+          # name and bio page url, strips the star id from the url, then hooks the name and id
+          # together in a pseudo dictionary to be split back out later
+          lowername = removedupestar.xpath('./text()')[0]
+          lowerurl = removedupestar.xpath('./@href')[0]
+          lowerurlre = re.search('\d{3,8}',lowerurl)
+          lowerentry = lowername.strip() + '|' + lowerurlre.group(0).strip()
+          lowerlist.append(lowerentry)
+        lowerlist = list(set(lowerlist))
+        for lowerstar in lowerlist:
+          if (len(lowerstar) > 0):
+            lowerstarname, lowerstarurl = lowerstar.split("|")
+            # There are different descriptors that will show up as a name, for now just adding them ad-hoc
+            # to following statement with "and lowerstar.lower() != 'bio'"
+            if (lowerstarname not in upperlist and lowerstarname.lower() != 'bio' and lowerstarname.lower() != 'interview'):
+              role = metadata.roles.new()
+              role.name = lowerstarname
+              if len(lowerstarurl) > 1:
+                photourl = "https://imgs1cdn.adultempire.com/actors/" + lowerstarurl + ".jpg"
+                if self.file_exists(photourl):
+                  role.photo = photourl
                 else:
                   photourl = "Image Not Available"
-                if DEBUG: Log('Added Lower List Star: %s    URL: %s' % (lowerstarname, photourl))
+              else:
+                photourl = "Image Not Available"
+              if DEBUG: Log('Added Lower List Star: %s    URL: %s' % (lowerstarname, photourl))
 
     except Exception, e:
       Log('Got an exception while parsing cast %s' %str(e))
